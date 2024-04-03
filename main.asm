@@ -239,10 +239,12 @@ initMagic       := $0750                        ; Initialized to a hard-coded nu
 
 .feature force_range ; allows -1 vs <-1 (used in orientationTable)
 
-.segment        "PRG_chunk1": absolute
+.segment "FILE0_DAT"
+;.segment        "PRG_chunk1": absolute
 
 ; incremented to reset MMC1 reg
-initRam:ldx     #$00
+initRam:
+        ldx     #$00
         jmp     initRamContinued
 
 nmi:    pha
@@ -272,11 +274,7 @@ nmi:    pha
         ldy     #$02
         jsr     generateNextPseudorandomNumber
 .endif
-        lda     #$00
-        sta     ppuScrollX
-        sta     PPUSCROLL
-        sta     ppuScrollY
-        sta     PPUSCROLL
+        jsr     copyCurrentScrollAndCtrlToPPU
         lda     #$01
         sta     verticalBlankingInterval
         jsr     pollControllerButtons
@@ -374,9 +372,9 @@ initRamContinued:
         lda     #$80
         sta     stack+1
         lda     #$35
-        sta     stack+3
+        sta     stack+2
         lda     #$AC
-        sta     stack+4
+        sta     stack+3
         jsr     updateAudioWaitForNmiAndDisablePpuRendering
         jsr     disableNmi
         lda     #$20
@@ -656,7 +654,7 @@ render_mode_legal_and_title_screens:
 
 gameMode_gameTypeMenu:
 .if NWC <> 1
-        inc     initRam
+;       inc     initRam
         lda     #MMC1_4KCHR_32KPRG_H_MIRROR
         jsr     setMMC1Control
 .endif
@@ -798,7 +796,7 @@ L830B:  lda     #$FF
 
 gameMode_levelMenu:
 .if NWC <> 1
-        inc     initRam
+;       inc     initRam
         lda     #MMC1_4KCHR_32KPRG_H_MIRROR
         jsr     setMMC1Control
         jsr     updateAudio2
@@ -4274,7 +4272,7 @@ highScoreIndexToHighScoreNamesOffset:
 highScoreIndexToHighScoreScoresOffset:
         .byte   $00,$03,$06,$09,$0C,$0F,$12,$15
 highScoreEntryScreen:
-        inc     initRam
+;       inc     initRam
 .if NWC = 1
         lda     #$00
 .else
@@ -5353,390 +5351,52 @@ LAA82:  ldx     #$FF
         jsr     memset_ppu_page_and_more
         rts
 
-copyCurrentScrollAndCtrlToPPU:
-        lda     #$00
-        sta     PPUSCROLL
-        sta     PPUSCROLL
-        lda     currentPpuCtrl
-        sta     PPUCTRL
-        rts
+copyCurrentScrollAndCtrlToPPU = $EAEA
 
-bulkCopyToPpu:
-        jsr     copyAddrAtReturnAddressToTmp_incrReturnAddrBy2
-        jmp     copyToPpu
-
-LAA9E:  pha
-        sta     PPUADDR
-        iny
-        lda     (tmp1),y
-        sta     PPUADDR
-        iny
-        lda     (tmp1),y
-        asl     a
-        pha
-        lda     currentPpuCtrl
-        ora     #$04
-        bcs     LAAB5
-        and     #$FB
-LAAB5:  sta     PPUCTRL
-        sta     currentPpuCtrl
-        pla
-        asl     a
-        php
-        bcc     LAAC2
-        ora     #$02
-        iny
-LAAC2:  plp
-        clc
-        bne     LAAC7
-        sec
-LAAC7:  ror     a
-        lsr     a
-        tax
-LAACA:  bcs     LAACD
-        iny
-LAACD:  lda     (tmp1),y
-        sta     PPUDATA
-        dex
-        bne     LAACA
-        pla
-        cmp     #$3F
-        bne     LAAE6
-        sta     PPUADDR
-        stx     PPUADDR
-        stx     PPUADDR
-        stx     PPUADDR
-LAAE6:  sec
-        tya
-        adc     tmp1
-        sta     tmp1
-        lda     #$00
-        adc     tmp2
-        sta     tmp2
-; Address to read from stored in tmp1/2
-copyToPpu:
-        ldx     PPUSTATUS
-        ldy     #$00
-        lda     (tmp1),y
-        bpl     LAAFC
-        rts
-
-LAAFC:  cmp     #$60
-        bne     LAB0A
-        pla
-        sta     tmp2
-        pla
-        sta     tmp1
-        ldy     #$02
-        bne     LAAE6
-LAB0A:  cmp     #$4C
-        bne     LAA9E
-        lda     tmp1
-        pha
-        lda     tmp2
-        pha
-        iny
-        lda     (tmp1),y
-        tax
-        iny
-        lda     (tmp1),y
-        sta     tmp2
-        stx     tmp1
-        bcs     copyToPpu
-copyAddrAtReturnAddressToTmp_incrReturnAddrBy2:
-        tsx
-        lda     stack+3,x
-        sta     tmpBulkCopyToPpuReturnAddr
-        lda     stack+4,x
-        sta     tmpBulkCopyToPpuReturnAddr+1
-        ldy     #$01
-        lda     (tmpBulkCopyToPpuReturnAddr),y
-        sta     tmp1
-        iny
-        lda     (tmpBulkCopyToPpuReturnAddr),y
-        sta     tmp2
-        clc
-        lda     #$02
-        adc     tmpBulkCopyToPpuReturnAddr
-        sta     stack+3,x
-        lda     #$00
-        adc     tmpBulkCopyToPpuReturnAddr+1
-        sta     stack+4,x
-        rts
+bulkCopyToPpu = $E7BB
 
 ;reg x: zeropage addr of seed; reg y: size of seed
-generateNextPseudorandomNumber:
-        lda     tmp1,x
-        and     #$02
-        sta     tmp1
-        lda     tmp2,x
-        and     #$02
-        eor     tmp1
-        clc
-        beq     @updateNextByteInSeed
-        sec
-@updateNextByteInSeed:
-        ror     tmp1,x
-        inx
-        dey
-        bne     @updateNextByteInSeed
-        rts
+generateNextPseudorandomNumber = $E9B1
 
 ; canon is initializeOAM
-copyOamStagingToOam:
-        lda     #$00
-        sta     OAMADDR
-        lda     #$02
-        sta     OAMDMA
-        rts
+copyOamStagingToOam = $E9C8
 
-pollController_actualRead:
-        ldx     joy1Location
-        inx
-        stx     JOY1
-        dex
-        stx     JOY1
-        ldx     #$08
-@readNextBit:
-        lda     JOY1
-        lsr     a
-        rol     newlyPressedButtons_player1
-        lsr     a
-        rol     tmp1
-        lda     JOY2_APUFC
-        lsr     a
-        rol     newlyPressedButtons_player2
-        lsr     a
-        rol     tmp2
-        dex
-        bne     @readNextBit
-        rts
+pollController = $EA1F
 
-addExpansionPortInputAsControllerInput:
-        lda     tmp1
-        ora     newlyPressedButtons_player1
-        sta     newlyPressedButtons_player1
-        lda     tmp2
-        ora     newlyPressedButtons_player2
-        sta     newlyPressedButtons_player2
-        rts
-
-        jsr     pollController_actualRead
-        beq     diffOldAndNewButtons
-pollController:
-        jsr     pollController_actualRead
-        jsr     addExpansionPortInputAsControllerInput
-        lda     newlyPressedButtons_player1
-        sta     generalCounter2
-        lda     newlyPressedButtons_player2
-        sta     generalCounter3
-        jsr     pollController_actualRead
-        jsr     addExpansionPortInputAsControllerInput
-        lda     newlyPressedButtons_player1
-        and     generalCounter2
-        sta     newlyPressedButtons_player1
-        lda     newlyPressedButtons_player2
-        and     generalCounter3
-        sta     newlyPressedButtons_player2
-diffOldAndNewButtons:
-        ldx     #$01
-@diffForPlayer:
-        lda     newlyPressedButtons_player1,x
-        tay
-        eor     heldButtons_player1,x
-        and     newlyPressedButtons_player1,x
-        sta     newlyPressedButtons_player1,x
-        sty     heldButtons_player1,x
-        dex
-        bpl     @diffForPlayer
-        rts
-
-unreferenced_func1:
-        jsr     pollController_actualRead
-LABD1:  ldy     newlyPressedButtons_player1
-        lda     newlyPressedButtons_player2
-        pha
-        jsr     pollController_actualRead
-        pla
-        cmp     newlyPressedButtons_player2
-        bne     LABD1
-        cpy     newlyPressedButtons_player1
-        bne     LABD1
-        beq     diffOldAndNewButtons
-        jsr     pollController_actualRead
-        jsr     addExpansionPortInputAsControllerInput
-LABEA:  ldy     newlyPressedButtons_player1
-        lda     newlyPressedButtons_player2
-        pha
-        jsr     pollController_actualRead
-        jsr     addExpansionPortInputAsControllerInput
-        pla
-        cmp     newlyPressedButtons_player2
-        bne     LABEA
-        cpy     newlyPressedButtons_player1
-        bne     LABEA
-        beq     diffOldAndNewButtons
-        jsr     pollController_actualRead
-        lda     tmp1
-        sta     heldButtons_player1
-        lda     tmp2
-        sta     heldButtons_player2
-        ldx     #$03
-LAC0D:  lda     newlyPressedButtons_player1,x
-        tay
-        eor     $F1,x
-        and     newlyPressedButtons_player1,x
-        sta     newlyPressedButtons_player1,x
-        sty     $F1,x
-        dex
-        bpl     LAC0D
-        rts
-
-memset_ppu_page_and_more:
-        sta     tmp1
-        stx     tmp2
-        sty     tmp3
-        lda     PPUSTATUS
-        lda     currentPpuCtrl
-        and     #$FB
-        sta     PPUCTRL
-        sta     currentPpuCtrl
-        lda     tmp1
-        sta     PPUADDR
-        ldy     #$00
-        sty     PPUADDR
-        ldx     #$04
-        cmp     #$20
-        bcs     LAC40
-        ldx     tmp3
-LAC40:  ldy     #$00
-        lda     tmp2
-LAC44:  sta     PPUDATA
-        dey
-        bne     LAC44
-        dex
-        bne     LAC44
-        ldy     tmp3
-        lda     tmp1
-        cmp     #$20
-        bcc     LAC67
-        adc     #$02
-        sta     PPUADDR
-        lda     #$C0
-        sta     PPUADDR
-        ldx     #$40
-LAC61:  sty     PPUDATA
-        dex
-        bne     LAC61
-LAC67:  ldx     tmp2
-        rts
+memset_ppu_page_and_more = $EA84
 
 ; reg a: value; reg x: start page; reg y: end page (inclusive)
-memset_page:
-        pha
-        txa
-        sty     tmp2
-        clc
-        sbc     tmp2
-        tax
-        pla
-        ldy     #$00
-        sty     tmp1
-@setByte:
-        sta     (tmp1),y
-        dey
-        bne     @setByte
-        dec     tmp2
-        inx
-        bne     @setByte
-        rts
+memset_page = $EAD2
 
-switch_s_plus_2a:
-        asl     a
-        tay
-        iny
-        pla
-        sta     tmp1
-        pla
-        sta     tmp2
-        lda     (tmp1),y
-        tax
-        iny
-        lda     (tmp1),y
-        sta     tmp2
-        stx     tmp1
-        jmp     (tmp1)
+switch_s_plus_2a = $EAFD
 
-.if NWC <> 1
-        sei
-.endif
-        inc     initRam
-.if NWC = 1
-        lda     #$00
-.else
-        lda     #$1A
-.endif
-        jsr     setMMC1Control
-        rts
-
-        rts
-
-setMMC1Control:
-        sta     MMC1_Control
-        lsr     a
-        sta     MMC1_Control
-        lsr     a
-        sta     MMC1_Control
-        lsr     a
-        sta     MMC1_Control
-        lsr     a
-        sta     MMC1_Control
-        rts
-
+; faking CHR bankswitching using PPUCTRL pattern table access bits
+; (CHR_TITLE_MENU and CHR_GAME work for now)
 changeCHRBank0:
-.if NWC = 1
-        rts
-.endif
-        sta     MMC1_CHR0
-        lsr     a
-        sta     MMC1_CHR0
-        lsr     a
-        sta     MMC1_CHR0
-        lsr     a
-        sta     MMC1_CHR0
-        lsr     a
-        sta     MMC1_CHR0
+        tay
+        lda     currentPpuCtrl
+        and     #%11110111
+        ora     ppuctrl_sprite_bits,y
+        sta     currentPpuCtrl
         rts
 
 changeCHRBank1:
-.if NWC = 1
-        rts
-.endif
-        sta     MMC1_CHR1
-        lsr     a
-        sta     MMC1_CHR1
-        lsr     a
-        sta     MMC1_CHR1
-        lsr     a
-        sta     MMC1_CHR1
-        lsr     a
-        sta     MMC1_CHR1
+        tay
+        lda     currentPpuCtrl
+        and     #%11101111
+        ora     ppuctrl_bckgnd_bits,y
+        sta     currentPpuCtrl
         rts
 
+; don't need these anymore
+setMMC1Control:
 changePRGBank:
-.if NWC = 1
         rts
-.endif
-        sta     MMC1_PRG
-        lsr     a
-        sta     MMC1_PRG
-        lsr     a
-        sta     MMC1_PRG
-        lsr     a
-        sta     MMC1_PRG
-        lsr     a
-        sta     MMC1_PRG
-        rts
+
+ppuctrl_sprite_bits:
+        .byte   %00001000, %00001000, %00001000, %00000000
+ppuctrl_bckgnd_bits:
+        .byte   %00010000, %00010000, %00010000, %00000000
 
 game_palette:
         .byte   $3F,$00,$20,$0F,$30,$12,$16,$0F
@@ -5825,10 +5485,10 @@ type_a_ending_nametable:
         .incbin "gfx/nametables/type_a_ending_nametable.bin"
 
 ; End of "PRG_chunk1" segment
-.code
+;.code
 
 
-.segment        "unreferenced_data1": absolute
+;.segment        "unreferenced_data1": absolute
 
 unreferenced_data1:
 .if PAL = 1
@@ -5840,10 +5500,10 @@ unreferenced_data1:
 .endif
 
 ; End of "unreferenced_data1" segment
-.code
+;.code
 
 
-.segment        "PRG_chunk2": absolute
+;.segment        "PRG_chunk2": absolute
 
 .include "data/demo_data.asm"
 
@@ -6004,6 +5664,10 @@ unreferenced_data3:
         .byte   $00,$00,$00,$00,$00,$00,$00,$00
         .byte   $00,$00,$00,$00,$00,$00,$00,$00
 .endif
+
+; this sound data should not cross a page boundary
+.align 256
+soundEffectSlot0_unreferencedInitData:
         .byte   $03,$7F,$0F,$C0
 ; Referenced by initSoundEffectShared
 soundEffectSlot0_gameOverCurtainInitData:
@@ -7675,68 +7339,58 @@ music_endings_noiseScript:
 .include "audio/music/music_endings.asm"
 
 ; End of "PRG_chunk2" segment
-.code
+;.code
 
 
-.segment        "unreferenced_data4": absolute
+;.segment        "unreferenced_data4": absolute
 
 .include "data/unreferenced_data4.asm"
 
 ; End of "unreferenced_data4" segment
-.code
+;.code
 
 
-.segment        "PRG_chunk3": absolute
+;.segment        "PRG_chunk3": absolute
+
+; this routine is entered by interrupting the last boot file load
+; by forcing an NMI not expected by the BIOS, allowing the license
+; screen to be skipped entirely.
+;
+; The last file writes $90 to $2000, enabling NMI during the file load.
+; The "extra" file in the FILE_COUNT causes the disk to keep seeking
+; past the last file, giving enough delay for an NMI to fire and interrupt
+; the process.
+bypass:
+        ; disable NMI
+        lda     #0
+        sta     PPUCTRL
+        ; replace NMI 3 "bypass" vector at $DFFA
+        lda     #<nmi
+        sta     $DFFA
+        lda     #>nmi
+        sta     $DFFB
+        ; tell the FDS reset routine that the BIOS initialized correctly
+        lda     #$35
+        sta     stack+2
+        lda     #$AC
+        sta     stack+3
+        ; reset the FDS to begin our program properly
+        jmp     ($FFFC)
 
 ; incremented to reset MMC1 reg
 reset:
-.if NWC = 1
-        nop
-        nop
-.endif
-        cld
-.if NWC <> 1
-        sei
-.endif
-        ldx     #$00
-.if NWC = 1
-        sta     currentPpuCtrl
-.endif
-        stx     PPUCTRL
-        stx     PPUMASK
-@vsyncWait1:
-        lda     PPUSTATUS
-        bpl     @vsyncWait1
-@vsyncWait2:
-        lda     PPUSTATUS
-        bpl     @vsyncWait2
-        dex
-        txs
-.if NWC = 1
-        lda     #$00
-.else
-        inc     reset
-        lda     #MMC1_4KCHR_32KPRG_H_MIRROR
-.endif
-        jsr     setMMC1Control
-        lda     #CHR_TITLE_MENU
-        jsr     changeCHRBank0
-        lda     #CHR_TITLE_MENU
-        jsr     changeCHRBank1
-.if NWC = 1
-        lda     #$00
-.else
-        lda     #PRG_32K_BANK
-.endif
-        jsr     changePRGBank
-        jmp     initRam
 
+; this will defnitely break in this port... oh well.
 .if NWC = 1
         lda     #$10
         jsr     $F1BD
         lda     #$00
         jsr     $F1BD
+.endif
+
         jmp     initRam
+
+.if NWC = 1
 
 .include "data/unreferenced_data5_nwc.asm"
 
@@ -7752,12 +7406,13 @@ reset:
 
 .endif
 
-.code
+;.code
 
 
-.segment        "VECTORS": absolute
-
+.segment "FILE1_DAT"
         .addr   nmi
+        .addr   nmi
+        .addr   bypass
         .addr   reset
 .if NWC = 1
         .word   $6010
@@ -7765,5 +7420,5 @@ reset:
         .addr   irq
 .endif
 
-; End of "VECTORS" segment
-.code
+; End of "FILE1_DAT" segment
+;.code

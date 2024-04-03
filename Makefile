@@ -15,9 +15,9 @@ CA65 := $(cc65Path)/bin/ca65
 LD65 := $(cc65Path)/bin/ld65
 nesChrEncode := python3 tools/nes-util/nes_chr_encode.py
 
-tetris.nes: tetris.o tetris-ram.o
+tetris.fds: tetris.o tetris-ram.o
 
-tetris:= tetris.nes
+tetris:= tetris.fds
 
 .SUFFIXES:
 .SECONDEXPANSION:

@@ -1,9 +1,10 @@
 *.nes
+*.fds
 *.o
 *.chr
 *.pyc
 tetris.lst
 tetris.lbl
 tetris.dbg
-cTools/scan_includes
-cTools/scan_includes.exe
+tools/cTools/scan_includes
+tools/cTools/scan_includes.exe
