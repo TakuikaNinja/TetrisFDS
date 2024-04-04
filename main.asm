@@ -5504,7 +5504,8 @@ unreferenced_data1:
 
 
 ;.segment        "PRG_chunk2": absolute
-
+; must be aligned to a page boundary
+.align 256
 .include "data/demo_data.asm"
 
 ; canon is updateAudio
@@ -7351,6 +7352,8 @@ music_endings_noiseScript:
 
 
 ;.segment        "PRG_chunk3": absolute
+; align this section to a page boundary, just in case
+.align 256
 
 ; this routine is entered by interrupting the last boot file load
 ; by forcing an NMI not expected by the BIOS, allowing the license
@@ -7410,12 +7413,13 @@ reset:
 
 
 .segment "FILE1_DAT"
+; disk game vectors will be loaded from a separate file
         .addr   nmi
         .addr   nmi
         .addr   bypass
         .addr   reset
 .if NWC = 1
-        .word   $6010
+        .word   $6010 ; will definitely break if set
 .else
         .addr   irq
 .endif

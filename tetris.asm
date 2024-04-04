@@ -2,7 +2,7 @@
 ; FDS disk files
 ;
 
-; This layout is from Brad Smith (rainwarrior)
+; This layout is modified from Brad Smith (rainwarrior)'s FDS example for CA65
 ; https://github.com/bbbradsmith/NES-ca65-example/tree/fds
 
 ; setting the file count 1 higher than files on disk for the license "bypass" technique
@@ -13,30 +13,38 @@ FILE_COUNT = 6
 .byte $01
 .byte "*NINTENDO-HVC*"
 .byte $00 ; manufacturer
-.byte "EXA"
-.byte $20 ; normal disk
-.byte $00 ; game version
+.byte "EIS" ; the original ID was "EI" (tEtrIs?), which makes it hard to create a 3-letter name...
+.byte ' ' ; normal disk (another example: 'E'=event)
+.byte $01 ; game version 1, since this has altered code
 .byte $00 ; side
 .byte $00 ; disk
 .byte $00 ; disk type
 .byte $00 ; unknown
 .byte FILE_COUNT ; boot file count
 .byte $FF,$FF,$FF,$FF,$FF
-.byte $92 ; 2017
-.byte $04 ; april
-.byte $17 ; 17
+
+; manufacturing date will use the USA release date
+.byte $01 ; 1989 (heisei era)
+.byte $11 ; november
+.byte $01 ; 1 (actual day is unknown)
+
 .byte $49 ; country
 .byte $61, $00, $00, $02, $00, $00, $00, $00, $00 ; unknown
-.byte $92 ; 2017
+
+; since this has altered code from what would have been used for an "official" version,
+; we'll use the port creation date as the disk rewrite date
+.byte $99 ; 2024 (showa era, since disk writers kept using it)
 .byte $04 ; april
-.byte $17 ; 17
+.byte $03 ; 3
+
 .byte $00, $80 ; unknown
 .byte $00, $00 ; disk writer serial number
 .byte $07 ; unknown
 .byte $00 ; disk write count
 .byte $00 ; actual disk side
-.byte $00 ; unknown
-.byte $00 ; price
+.byte $00 ; disk type?
+.byte $00 ; disk version?
+
 ; block 2
 .byte $02
 .byte FILE_COUNT
