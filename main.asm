@@ -255,6 +255,7 @@ nmi:    pha
         lda     #$00
         sta     oamStagingLength
         jsr     render
+        jsr     copyCurrentScrollAndCtrlToPPU ; set scroll ASAP after accessing PPUADDR
         dec     sleepCounter
         lda     sleepCounter
         cmp     #$FF
@@ -274,7 +275,6 @@ nmi:    pha
         ldy     #$02
         jsr     generateNextPseudorandomNumber
 .endif
-        jsr     copyCurrentScrollAndCtrlToPPU
         lda     #$01
         sta     verticalBlankingInterval
         jsr     pollControllerButtons
@@ -365,7 +365,7 @@ initRamContinued:
 .if NWC = 1
         sta     currentPpuMask
 .endif
-        jsr     LE006
+        jsr     initAPU_status
         jsr     updateAudio2
         lda     #$C0
         sta     stack
@@ -378,20 +378,20 @@ initRamContinued:
         jsr     updateAudioWaitForNmiAndDisablePpuRendering
         jsr     disableNmi
         lda     #$20
-        jsr     LAA82
+        jsr     initPPU_addrA_hiByte
         lda     #$24
-        jsr     LAA82
+        jsr     initPPU_addrA_hiByte
         lda     #$28
-        jsr     LAA82
+        jsr     initPPU_addrA_hiByte
         lda     #$2C
-        jsr     LAA82
+        jsr     initPPU_addrA_hiByte
         lda     #tileEmpty
         ldx     #>playfield
         ldy     #>playfieldForSecondPlayer
         jsr     memset_page
         jsr     waitForVBlankAndEnableNmi
         jsr     updateAudioWaitForNmiAndResetOamStaging
-        jsr     updateAudioWaitForNmiAndEnablePpuRendering
+        jsr     updateAudioWaitForNmiAndResetOamStaging
         jsr     updateAudioWaitForNmiAndResetOamStaging
         lda     #$0E
         sta     unused_0E
@@ -512,6 +512,9 @@ playState_player2ControlsActiveTetrimino:
         rts
 
 gameMode_legalScreen:
+        jsr     loadCHRFromDisk
+    .word mainLoadList
+        jsr     waitForVBlankAndEnableNmi
         jsr     updateAudio2
         lda     #$00
         sta     renderMode
@@ -532,7 +535,7 @@ gameMode_legalScreen:
         jsr     updateAudioWaitForNmiAndResetOamStaging
         jsr     updateAudioWaitForNmiAndEnablePpuRendering
         jsr     updateAudioWaitForNmiAndResetOamStaging
-        lda     #$00
+        lda     #$FF
 .endif
         ldx     #>oamStaging
         ldy     #>oamStaging
@@ -590,11 +593,7 @@ gameMode_titleScreen:
         jsr     updateAudioWaitForNmiAndResetOamStaging
         jsr     updateAudioWaitForNmiAndEnablePpuRendering
         jsr     updateAudioWaitForNmiAndResetOamStaging
-.if NWC = 1
         lda     #$FF
-.else
-        lda     #$00
-.endif
         ldx     #>oamStaging
         ldy     #>oamStaging
         jsr     memset_page
@@ -3786,6 +3785,9 @@ playState_noop:
         rts
 
 endingAnimation:
+        jsr     loadCHRFromDisk
+    .word endingALoadList
+        jsr     waitForVBlankAndEnableNmi
         lda     #$02
         sta     spriteIndexInOamContentLookup
         lda     #$04
@@ -3824,6 +3826,9 @@ endingAnimationB:
         cmp     #$09
         bne     @checkPenguinOrOstrichEnding
         ; castle ending for level 9/19
+        jsr     waitForVBlankAndEnableNmi
+        jsr     loadCHRFromDisk
+    .word endingBLoadList
         lda     #CHR_TYPEB_ENDING
         jsr     changeCHRBank0
         lda     #CHR_TYPEB_ENDING
@@ -4279,12 +4284,12 @@ highScoreEntryScreen:
         lda     #MMC1_4KCHR_32KPRG_H_MIRROR
 .endif
         jsr     setMMC1Control
+        jsr     loadCHRFromDisk
+    .word mainLoadList
         lda     #$09
         jsr     setMusicTrack
         lda     #$02
         sta     renderMode
-        jsr     updateAudioWaitForNmiAndDisablePpuRendering
-        jsr     disableNmi
         lda     #CHR_TITLE_MENU
         jsr     changeCHRBank0
         lda     #CHR_TITLE_MENU
@@ -5346,7 +5351,8 @@ _updatePpuCtrl:
         sta     currentPpuCtrl
         rts
 
-LAA82:  ldx     #$FF
+initPPU_addrA_hiByte:
+        ldx     #$FF
         ldy     #$00
         jsr     memset_ppu_page_and_more
         rts
@@ -5370,8 +5376,103 @@ memset_page = $EAD2
 
 switch_s_plus_2a = $EAFD
 
+; disk access routine
+FetchDirectPtr = $E844
+LoadFiles = $E1F8
+FDS_DRIVE_STATUS = $4032
+
+loadCHRFromDisk:
+		jsr FetchDirectPtr ; fetch load list from stack
+		lda tmp2 ; check if this pointer was already loaded from
+		cmp loadList+1
+		bne :+
+		lda tmp1
+		cmp loadList
+		bne :+
+		rts ; exit if load list pointer matches
+:
+		lda tmp1 ; save load list pointer
+		sta loadList
+		lda tmp2
+		sta loadList+1
+        jsr initAPU_status ; reset APU
+		
+load:
+		jsr updateAudioWaitForNmiAndDisablePpuRendering
+        jsr disableNmi
+		jsr LoadFiles ; load CHR files
+	.word diskID
+loadList:
+	.word $0000 ; dummy value which should be overwritten on the first load
+		bne _error ; Check if there is an error
+		rts ; exit if no error
+_error:
+		jsr printError      ;If so print the error code to screen
+_sideError:
+		lda FDS_DRIVE_STATUS
+		and #$01
+		beq _sideError     ;Wait until disk is ejected
+_insert:
+		lda FDS_DRIVE_STATUS
+		and #$01
+		bne _insert      ;Wait until disk is inserted
+		beq load
+
+; print the disk error code on screen
+LoadTileset = $EBAF
+
+printError:
+		pha ; save error code for later
+		ldy #$10 ; high address
+		lda #$00 ; low address = 0, normal 2bpp, write tiles, no fill
+		ldx #16 ; number of tiles
+		jsr LoadTileset ; load temporary BG tiles into $1000 for the error code
+	.word tempBGTiles
+		ldy #$1F ; high address
+		lda #$F0 ; low address = F, normal 2bpp, write tiles, no fill
+		ldx #1 ; number of tiles
+		jsr LoadTileset ; load temporary blank tile into $1FF0 to keep the nametable clean
+	.word tempBlankTile
+		lda #$20
+        jsr initPPU_addrA_hiByte ; clear nametable
+        lda #$21 ; display the error code (rendering is disabled so it's safe to do this right now)
+        sta PPUADDR
+        lda #$EF
+        sta PPUADDR
+        pla ; get error code
+        jsr twoDigsToPPU ; write to PPUDATA
+        jsr waitForVBlankAndEnableNmi
+        jmp updateAudioWaitForNmiAndEnablePpuRendering
+
+; temporary BG tiles for displaying hexadecimal numbers (0~F)
+tempBGTiles:
+	.incbin "gfx/title_menu_tileset.chr", $0000, $100
+; temporary blank tile to put at $1FF0 to keep the nametable clean
+tempBlankTile:
+	.incbin "gfx/title_menu_tileset.chr", $0FF0, $10
+
+; this structure is checked when accessing the disk
+diskID:
+    .byte $00 ; manufacturer
+    .byte "EIS" ; the original ID was "EI" (tEtrIs?), which makes it hard to create a 3-letter name...
+    .byte ' ' ; normal disk (another example: 'E'=event)
+    .byte $01 ; game version 1, since this has altered code
+    .byte $00 ; side
+    .byte $00 ; disk
+    .byte $00 ; disk type
+    .byte $00 ; unknown
+
+; these are the lists of files to load for each pair of modes
+mainLoadList:
+	.byte $C0, $C1, $FF ; legal/title/menus + game + Type-A endings at levels 2/12 & 6/16
+
+endingALoadList:
+	.byte $C2, $FF ; Type-A endings + Type-B endings not at level 9/19
+
+endingBLoadList:
+	.byte $C3, $FF ; Type-B endings at level 9/19
+
 ; faking CHR bankswitching using PPUCTRL pattern table access bits
-; (CHR_TITLE_MENU and CHR_GAME work for now)
 changeCHRBank0:
         tay
         lda     currentPpuCtrl
@@ -5394,9 +5495,9 @@ changePRGBank:
         rts
 
 ppuctrl_sprite_bits:
-        .byte   %00001000, %00001000, %00001000, %00000000
+        .byte   %00001000, %00000000, %00001000, %00000000
 ppuctrl_bckgnd_bits:
-        .byte   %00010000, %00010000, %00010000, %00000000
+        .byte   %00010000, %00000000, %00010000, %00000000
 
 game_palette:
         .byte   $3F,$00,$20,$0F,$30,$12,$16,$0F
@@ -5515,8 +5616,6 @@ updateAudio_jmp:
 ; canon is updateAudio
 updateAudio2:
         jmp     soundEffectSlot2_makesNoSound
-
-LE006:  jmp     LE1D8
 
 ; Referenced via updateSoundEffectSlotShared
 soundEffectSlot0Init_table:
@@ -5769,7 +5868,8 @@ updateSoundEffectSlotShared:
 updateSoundEffectSlotShared_rts:
         rts
 
-LE1D8:  lda     #$0F
+initAPU_status:
+        lda     #$0F
         sta     SND_CHN
         lda     #$55
         sta     soundRngSeed

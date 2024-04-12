@@ -8,8 +8,8 @@ It abuses the fact that most of the variables and routines originate from the [F
 It builds `tetris.fds` with the following differences from the original game:
 - Boots and runs on FDS, bypassing the BIOS' license message check.
 - Most of the generic subroutines have been replaced with calls to the BIOS routines.
+- Loading screens have been inserted to load the appropriate CHR data for each screen.
 - CHR bankswitching is faked to keep the title/menu and gameplay screens intact.
-   - Type-A/B ending screens do not have the correct CHR banks as a result.
 - Minor bugfix: PPUCTRL is now set in the NMI handler to maintain the correct nametable selection bits (0-1).
    - This was required for the game to look correct without the MMC1's single-screen mirroring mode.
 
