@@ -803,6 +803,9 @@ gameMode_levelMenu:
         lda     #$01
         sta     renderMode
 .if NWC <> 1
+        jsr     loadCHRFromDisk
+    .word mainLoadList
+        jsr     waitForVBlankAndEnableNmi
         jsr     updateAudioWaitForNmiAndDisablePpuRendering
         jsr     disableNmi
         lda     #CHR_TITLE_MENU
