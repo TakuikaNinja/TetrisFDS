@@ -4286,10 +4286,13 @@ highScoreEntryScreen:
         jsr     setMMC1Control
         jsr     loadCHRFromDisk
     .word mainLoadList
+        jsr     waitForVBlankAndEnableNmi
         lda     #$09
         jsr     setMusicTrack
         lda     #$02
         sta     renderMode
+        jsr     updateAudioWaitForNmiAndDisablePpuRendering
+        jsr     disableNmi
         lda     #CHR_TITLE_MENU
         jsr     changeCHRBank0
         lda     #CHR_TITLE_MENU
